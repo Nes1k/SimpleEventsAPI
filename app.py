@@ -3,22 +3,53 @@ import json
 
 from model import EventModel
 
+api = falcon.API()
+
 
 class ResourceEvent:
-    pass
+
+    def on_get(self, req, resp):
+        resp.status = falcon.HTTP_200
+
+    def on_post(self, req, resp):
+        resp.status = falcon.HTTP_201
+
+    def on_put(self, req, resp):
+        resp.status = falcon.HTTP_200
+
+    def on_delete(self, req, resp):
+        resp.status = falcon.HTTP_200
+
+api.add_route('/', ResourceEvent())
 
 
 class ResourceLastEvent:
-    pass
+
+    def on_get(self, req, resp):
+        resp.status = falcon.HTTP_200
+
+api.add_route('/last/', ResourceLastEvent())
 
 
 class ResourceByPerson:
-    pass
+
+    def on_get(self, req, resp):
+        resp.status = falcon.HTTP_200
+
+api.add_route('/person/', ResourceByPerson())
 
 
 class ResourceByCategory:
-    pass
+
+    def on_get(self, req, resp):
+        resp.status = falcon.HTTP_200
+
+api.add_route('/category/', ResourceByCategory())
 
 
 class ResourceByTime:
-    pass
+
+    def on_get(self, req, resp):
+        resp.status = falcon.HTTP_200
+
+api.add_route('/time/', ResourceByTime())
