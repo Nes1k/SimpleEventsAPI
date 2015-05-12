@@ -1,55 +1,40 @@
-import falcon
-import json
-
+# -*- coding: utf-8 -*-
+import argparse
+from db import con_params, connect
 from model import EventModel
-
-api = falcon.API()
-
-
-class ResourceEvent:
-
-    def on_get(self, req, resp):
-        resp.status = falcon.HTTP_200
-
-    def on_post(self, req, resp):
-        resp.status = falcon.HTTP_201
-
-    def on_put(self, req, resp):
-        resp.status = falcon.HTTP_200
-
-    def on_delete(self, req, resp):
-        resp.status = falcon.HTTP_200
-
-api.add_route('/', ResourceEvent())
+from api import api
 
 
-class ResourceLastEvent:
-
-    def on_get(self, req, resp):
-        resp.status = falcon.HTTP_200
-
-api.add_route('/last/', ResourceLastEvent())
-
-
-class ResourceByPerson:
-
-    def on_get(self, req, resp):
-        resp.status = falcon.HTTP_200
-
-api.add_route('/person/', ResourceByPerson())
-
-
-class ResourceByCategory:
-
-    def on_get(self, req, resp):
-        resp.status = falcon.HTTP_200
-
-api.add_route('/category/', ResourceByCategory())
+def check_con_params():
+    if con_params:
+        try:
+            connect()
+        except Exception:
+            print('''Error with connection to database. \
+                    \nCheck connection parameters in file db.py''')
+            return False
+        else:
+            return True
+    else:
+        print('Lack of connection parameters in file db.py')
+        return False
 
 
-class ResourceByTime:
+def server():
+    from wsgiref import simple_server
+    httpd = simple_server.make_server('127.0.0.1', 8000, api)
+    httpd.serve_forever()
 
-    def on_get(self, req, resp):
-        resp.status = falcon.HTTP_200
 
-api.add_route('/time/', ResourceByTime())
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    '--migrate', help='Create table for app', action='store_true')
+parser.add_argument('--run', help='Run server', action='store_true')
+args = parser.parse_args()
+if args.migrate:
+    if check_con_params():
+        EventModel.create_table()
+elif args.run:
+    if check_con_params():
+        print('Running server on http:\\\\127.0.0.1:8000')
+        server()

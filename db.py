@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 
 import MySQLdb
+from datetime import datetime
+import json
 
 con_params = {
-    'db': 'todo',
+    'db': '',
     'host': 'localhost',
-    'user': 'cbuser',
-    'passwd': 'cbpass'
+    'user': '',
+    'passwd': ''
 }
 
 
@@ -103,12 +105,16 @@ class Query(metaclass=BasicQuery):
                 self._limit = 'LIMIT %s, %s ' % start_number
         return self
 
-    def create(self, **kwargs):
+    def create(self, raw_json=None, **kwargs):
         '''
             Create, save and returned instance of object
         '''
+        if raw_json is not None:
+            kwargs_from_json = json.loads(raw_json)
+            kwargs.update(kwargs_from_json)
         instance = self.klass(**kwargs)
-        instance.save()
+        if instance.is_valid():
+            instance.save()
         return instance
 
     def delete(self, id=None):
@@ -118,7 +124,10 @@ class Query(metaclass=BasicQuery):
                                                     id or self.instance.id)
             execute_sql(sql)
 
-    def get_or_create(self, **kwargs):
+    def get_or_create(self, raw_json=None, **kwargs):
+        if raw_json is not None:
+            kwargs_from_json = json.loads(raw_json)
+            kwargs.update(kwargs_from_json)
         instance = None
         if kwargs.get('id', None):
             instance = self.get(id=kwargs['id'])
@@ -139,6 +148,16 @@ class Query(metaclass=BasicQuery):
         instance.id = value['id']
         return instance
 
+    def get_in_json(self, **kwargs):
+        sql_query = self.klass._simple_query()
+        sql_query += self._parse_conditions_to_sql(**kwargs)
+        try:
+            (*value, ) = execute_sql(sql_query).fetchone()
+        except (TypeError, AttributeError):
+            return None
+        value = self.klass._value_parse_to_dict(*value)
+        return json.dumps(value, default=json_serial)
+
     def all(self):
         self._q = self.klass._simple_query()
         return self
@@ -153,6 +172,9 @@ class Query(metaclass=BasicQuery):
 
     def order_by(self, *args):
         sql_query = 'ORDER BY '
+        if not args:
+            self._order_by = sql_query + 'id ASC'
+            return self
         for key in args:
             if sql_query != 'ORDER BY ':
                 sql_query += ', '
@@ -176,6 +198,19 @@ class Query(metaclass=BasicQuery):
         self._q = query
         return list(self)
 
+    def json(self):
+        '''
+            Invoke self iter for list, created dict of fields
+            and value of instance then dump for raw json.
+        '''
+        instances_list = []
+        for instance in list(self.__iter__()):
+            instance_to_dict = {}
+            for field in self.klass.Fields:
+                instance_to_dict[field] = getattr(instance, field)
+            instances_list.append(instance_to_dict)
+        return json.dumps(instances_list, default=json_serial)
+
     @classmethod
     def _parse_conditions_to_sql(cls, **kwargs):
         sql_query = ' WHERE '
@@ -185,13 +220,20 @@ class Query(metaclass=BasicQuery):
             sql_query += '%s = \'%s\'' % (key, value)
         return sql_query
 
-    def update(self, **kwargs):
+    def update(self, raw_json=None, resp_json=False, **kwargs):
         if self.instance:
             execute_sql(self._create_update_sql())
         else:
-            execute_sql(self._create_update_sql_table(**kwargs))
+            if raw_json is not None:
+                kwargs_from_json = json.loads(raw_json)
+                kwargs.update(kwargs_from_json)
+            execute_sql(self._create_update_sql_from_kwargs(**kwargs))
+            if kwargs.get('id', None):
+                if resp_json:
+                    return self.get_in_json(id=kwargs['id'])
+                return self.get(id=kwargs['id'])
 
-    def _create_update_sql_table(self, **kwargs):
+    def _create_update_sql_from_kwargs(self, **kwargs):
         table_name = self.klass.__name__.lower()
         sql_query = 'UPDATE %s SET ' % table_name
         for field, value in kwargs.items():
@@ -199,6 +241,8 @@ class Query(metaclass=BasicQuery):
                 if not sql_query.endswith('SET '):
                     sql_query += ', '
                 sql_query += '%s = \'%s\'' % (field, value)
+        if kwargs.get('id', None):
+            sql_query += ' WHERE id = %i' % kwargs['id']
         return sql_query
 
     def _create_update_sql(self):
@@ -360,3 +404,14 @@ class Model(metaclass=BasicModel):
         return tuple_of_fields
 
     objects = Query()
+
+# Helpers
+
+
+def json_serial(obj):
+    """JSON serializer for objects not serializable by default json code"""
+
+    if isinstance(obj, datetime):
+        serial = obj.isoformat()
+        return serial
+    raise TypeError("Type not serializable")
